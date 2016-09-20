@@ -1892,7 +1892,9 @@ class BootstrapTreeview(object):
         result = []
 
         for child_item in self.child_items(item):
-            result.append(self.read_contents(nodeid=self.get_nodeid(child_item)))
+            result.append(
+                self.read_contents(
+                    nodeid=self.get_nodeid(child_item), include_images=include_images))
 
         if include_images:
             this_item = (self.image_getter(item), sel.text(item))
