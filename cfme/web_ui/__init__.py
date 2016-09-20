@@ -75,7 +75,7 @@ from cfme.fixtures.pytest_selenium import Select
 from utils import attributize_string, castmap, normalize_space, version
 from utils.log import logger
 from utils.pretty import Pretty
-from wait_for import TimedOutError
+from wait_for import TimedOutError, wait_for
 
 
 class Selector(object):
@@ -1648,6 +1648,260 @@ def _fill_radio(radio, value):
     logger.debug(' Filling in Radio{} with value "{}"'.format(tuple(radio.names), value))
     sel.click(radio.choice(value))
     radio.observer_wait(value)
+
+
+class BootstrapTreeview(object):
+    """A class representing the Bootstrap treeview used in newer builds.
+
+    Implements ``expand_path``, ``click_path``, ``read_contents``. All are implemented in manner
+    very similar to the original :py:class:`Tree`.
+
+    Args:
+        tree_id: Id of the tree, the closest div to the root ``ul`` element.
+    """
+    ROOT_ITEM = './ul/li[1]'
+    SELECTED_ITEM = './ul/li[contains(@class, "node-selected")]'
+    CHILD_ITEMS = (
+        './ul/li[starts-with(@data-nodeid, {id}) and not(@data-nodeid={id})'
+        ' and count(./span[contains(@class, "indent")])={indent}]')
+    CHILD_ITEMS_TEXT = (
+        './ul/li[starts-with(@data-nodeid, {id}) and not(@data-nodeid={id})'
+        ' and contains(normalize-space(text()), {text})'
+        ' and count(./span[contains(@class, "indent")])={indent}]')
+    ITEM_BY_NODEID = './ul/li[@data-nodeid={}]'
+    IS_EXPANDABLE = './span[contains(@class, "expand-icon")]'
+    IS_EXPANDED = './span[contains(@class, "expand-icon") and contains(@class, "fa-angle-down")]'
+    IS_LOADING = './span[contains(@class, "expand-icon") and contains(@class, "fa-spinner")]'
+    INDENT = './span[contains(@class, "indent")]'
+
+    def __init__(self, tree_id):
+        self.tree_id = tree_id
+
+    def image_getter(self, item):
+        """Look up the image that is hidden in the style tag
+
+        Returns:
+            The name of the image without the hash, path and extension.
+        """
+        image_node = sel.element('./span[contains(@class, "node-image")]', root=item)
+        style = sel.get_attribute(image_node, 'style')
+        image_href = re.search(r'url\("([^"]+)"\)', style).groups()[0]
+        return re.search(r'/([^/]+)-[0-9a-f]+\.png$', image_href).groups()[0]
+
+    def locate(self):
+        return '#{}'.format(self.tree_id)
+
+    @property
+    def root_item(self):
+        return sel.element(self.ROOT_ITEM, root=self)
+
+    @property
+    def selected_item(self):
+        return sel.element(self.SELECTED_ITEM, root=self)
+
+    @classmethod
+    def indents(cls, item):
+        return len(sel.elements(cls.INDENT, root=item))
+
+    @classmethod
+    def is_expandable(cls, item):
+        return bool(sel.elements(cls.IS_EXPANDABLE, root=item))
+
+    @classmethod
+    def is_expanded(cls, item):
+        return bool(sel.elements(cls.IS_EXPANDED, root=item))
+
+    @classmethod
+    def is_loading(cls, item):
+        return bool(sel.elements(cls.IS_LOADING, root=item))
+
+    @classmethod
+    def is_collapsed(cls, item):
+        return not cls.is_expanded(item)
+
+    @classmethod
+    def is_selected(cls, item):
+        return 'node-selected' in sel.classes(item)
+
+    @classmethod
+    def get_nodeid(cls, item):
+        return sel.get_attribute(item, 'data-nodeid')
+
+    @classmethod
+    def get_expand_arrow(cls, item):
+        return sel.element(cls.IS_EXPANDABLE, root=item)
+
+    def child_items(self, item):
+        nodeid = unescape(quoteattr(self.get_nodeid(item)))
+        node_indents = self.indents(item)
+        return sel.elements(self.CHILD_ITEMS.format(id=nodeid, indent=node_indents + 1), root=self)
+
+    def child_items_with_text(self, item, text):
+        nodeid = unescape(quoteattr(self.get_nodeid(item)))
+        text = unescape(quoteattr(text))
+        node_indents = self.indents(item)
+        return sel.elements(
+            self.CHILD_ITEMS_TEXT.format(id=nodeid, text=text, indent=node_indents + 1), root=self)
+
+    def get_item_by_nodeid(self, nodeid):
+        nodeid_q = unescape(quoteattr(nodeid))
+        try:
+            return sel.element(self.ITEM_BY_NODEID.format(nodeid_q), root=self)
+        except NoSuchElementException:
+            raise exceptions.CandidateNotFound({
+                'message':
+                    'Could not find the item with nodeid {} in Boostrap tree {}'.format(
+                        nodeid,
+                        self.tree_id),
+                'path': '',
+                'cause': ''})
+
+    def expand_node(self, nodeid):
+        """Expands a node given its nodeid. Must be visible
+
+        Args:
+            nodeid: ``nodeId`` of the node
+
+        Returns:
+            ``True`` if it was possible to expand the node, otherwise ``False``.
+        """
+        logger.trace('Expanding node %s on tree %s', nodeid, self.tree_id)
+        node = self.get_item_by_nodeid(nodeid)
+        if not self.is_expandable(node):
+            return False
+        if self.is_collapsed(node):
+            arrow = self.get_expand_arrow(node)
+            sel.click(arrow)
+            time.sleep(0.1)
+            wait_for(
+                lambda: not self.is_loading(self.get_item_by_nodeid(nodeid)),
+                delay=0.2, num_sec=30)
+            wait_for(
+                lambda: self.is_expanded(self.get_item_by_nodeid(nodeid)),
+                delay=0.2, num_sec=10)
+        return True
+
+    def expand_path(self, *path, **kwargs):
+        """Expands given path and returns the leaf node.
+
+        The path items can be plain strings. In that case, exact string matching happens. Path items
+        can also be compiled regexps, where the ``match`` method is used to determine if the node
+        is the one we want. And finally, the path items can be 2-tuples, where the second item can
+        be the string or regular expression and the first item is the image to be matched using
+        :py:meth:`image_getter` method.
+
+        Args:
+            *path: The path (explained above)
+
+        Returns:
+            The leaf WebElement.
+
+        Raises:
+            :py:class:`exceptions.CandidateNotFound` when the node is not found in the tree.
+        """
+        sel.wait_for_ajax()
+        logger.info('Expanding path %r on tree %s', path, self.tree_id)
+        node = self.root_item
+        step = path[0]
+        if isinstance(step, tuple):
+            image = step[0]
+            step = step[1]
+        else:
+            image = None
+        step_repr = step.pattern if isinstance(step, re._pattern_type) else step
+        steps_tried = []
+        if image is None:
+            steps_tried.append(step_repr)
+        else:
+            steps_tried.append('{}[{}]'.format(step_repr, image))
+        path = path[1:]
+        text = sel.text(node)
+        if isinstance(step, re._pattern_type):
+            match = step.match(text) is not None
+        else:
+            match = step == text
+        if not match or (image is not None and self.image_getter(node) != image):
+            raise exceptions.CandidateNotFound({
+                'message':
+                    'Could not find the item {} in Boostrap tree {}'.format(
+                        '/'.join(steps_tried),
+                        self.tree_id),
+                'path': path,
+                'cause': 'Root node did not match {}'.format(step)})
+
+        for step in path:
+            if isinstance(step, tuple):
+                image = step[0]
+                step = step[1]
+            else:
+                image = None
+            step_repr = step.pattern if isinstance(step, re._pattern_type) else step
+            if image is None:
+                steps_tried.append(step_repr)
+            else:
+                steps_tried.append('{}[{}]'.format(step_repr, image))
+            if not self.expand_node(self.get_nodeid(node)):
+                raise exceptions.CandidateNotFound({
+                    'message':
+                        'Could not find the item {} in Boostrap tree {}'.format(
+                            '/'.join(steps_tried),
+                            self.tree_id),
+                    'path': path,
+                    'cause': 'Could not expand the {} node'.format(step)})
+            if isinstance(step, basestring):
+                child_items = self.child_items_with_text(node, step)
+            else:
+                child_items = self.child_items(node)
+            for child_item in child_items:
+                text = sel.text(child_item)
+                if isinstance(step, re._pattern_type):
+                    match = step.match(text) is not None
+                else:
+                    match = step == text
+                if match:
+                    if image is not None and self.image_getter(node) != image:
+                        continue
+                    node = child_item
+                    break
+            else:
+                raise exceptions.CandidateNotFound({
+                    'message':
+                        'Could not find the item {} in Boostrap tree {}'.format(
+                            '/'.join(steps_tried),
+                            self.tree_id),
+                    'path': path,
+                    'cause': 'No child node of {} found'.format(steps_tried[-2])})
+
+        return node
+
+    def click_path(self, *path, **kwargs):
+        """Expands the path and clicks the leaf node.
+
+        See :py:meth:`expand_path` for more informations about synopsis.
+        """
+        node = self.expand_path(*path, **kwargs)
+        sel.click(node)
+        return node
+
+    def read_contents(self, nodeid=None, include_images=False):
+        if nodeid is None:
+            return self.read_contents(nodeid=self.get_nodeid(self.root_item))
+
+        item = self.get_item_by_nodeid(nodeid)
+        self.expand_node(nodeid)
+        result = []
+
+        for child_item in self.child_items(item):
+            result.append(self.read_contents(nodeid=self.get_nodeid(child_item)))
+
+        if include_images:
+            this_item = (self.image_getter(item), sel.text(item))
+        else:
+            this_item = sel.text(item)
+        if result:
+            return [this_item, result]
+        else:
+            return this_item
 
 
 class Tree(Pretty):
