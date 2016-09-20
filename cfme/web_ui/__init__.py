@@ -1781,6 +1781,28 @@ class BootstrapTreeview(object):
                 delay=0.2, num_sec=10)
         return True
 
+    def collapse_node(self, nodeid):
+        """Collapses a node given its nodeid. Must be visible
+
+        Args:
+            nodeid: ``nodeId`` of the node
+
+        Returns:
+            ``True`` if it was possible to expand the node, otherwise ``False``.
+        """
+        logger.trace('Collapsing node %s on tree %s', nodeid, self.tree_id)
+        node = self.get_item_by_nodeid(nodeid)
+        if not self.is_expandable(node):
+            return False
+        if self.is_expanded(node):
+            arrow = self.get_expand_arrow(node)
+            sel.click(arrow)
+            time.sleep(0.1)
+            wait_for(
+                lambda: self.is_collapsed(self.get_item_by_nodeid(nodeid)),
+                delay=0.2, num_sec=10)
+        return True
+
     def expand_path(self, *path, **kwargs):
         """Expands given path and returns the leaf node.
 
@@ -1883,9 +1905,12 @@ class BootstrapTreeview(object):
         sel.click(node)
         return node
 
-    def read_contents(self, nodeid=None, include_images=False):
+    def read_contents(self, nodeid=None, include_images=False, collapse_after_read=False):
         if nodeid is None:
-            return self.read_contents(nodeid=self.get_nodeid(self.root_item))
+            return self.read_contents(
+                nodeid=self.get_nodeid(self.root_item),
+                include_images=include_images,
+                collapse_after_read=collapse_after_read)
 
         item = self.get_item_by_nodeid(nodeid)
         self.expand_node(nodeid)
@@ -1894,7 +1919,12 @@ class BootstrapTreeview(object):
         for child_item in self.child_items(item):
             result.append(
                 self.read_contents(
-                    nodeid=self.get_nodeid(child_item), include_images=include_images))
+                    nodeid=self.get_nodeid(child_item),
+                    include_images=include_images,
+                    collapse_after_read=collapse_after_read))
+
+        if collapse_after_read:
+            self.collapse_node(nodeid)
 
         if include_images:
             this_item = (self.image_getter(item), sel.text(item))
