@@ -1671,6 +1671,8 @@ class BootstrapTreeview(object):
     ITEM_BY_NODEID = './ul/li[@data-nodeid={}]'
     IS_EXPANDABLE = './span[contains(@class, "expand-icon")]'
     IS_EXPANDED = './span[contains(@class, "expand-icon") and contains(@class, "fa-angle-down")]'
+    IS_CHECKABLE = './span[contains(@class, "check-icon")]'
+    IS_CHECKED = './span[contains(@class, "check-icon") and contains(@class, "fa-check-square-o")]'
     IS_LOADING = './span[contains(@class, "expand-icon") and contains(@class, "fa-spinner")]'
     INDENT = './span[contains(@class, "indent")]'
 
@@ -1710,6 +1712,14 @@ class BootstrapTreeview(object):
     @classmethod
     def is_expanded(cls, item):
         return bool(sel.elements(cls.IS_EXPANDED, root=item))
+
+    @classmethod
+    def is_checkable(cls, item):
+        return bool(sel.elements(cls.IS_CHECKABLE, root=item))
+
+    @classmethod
+    def is_checked(cls, item):
+        return bool(sel.elements(cls.IS_CHECKED, root=item))
 
     @classmethod
     def is_loading(cls, item):
@@ -1934,6 +1944,31 @@ class BootstrapTreeview(object):
             return [this_item, result]
         else:
             return this_item
+
+    def check_uncheck_node(self, check, *path, **kwargs):
+        leaf = self.expand_path(*path, **kwargs)
+        if not self.is_checkable(leaf):
+            raise TypeError('Item with path {} in {} is not checkable'.format(
+                castmap(str, path), self.tree_id))
+        checked = self.is_checked(leaf)
+        if checked != check:
+            sel.click(sel.element(self.IS_CHECKABLE, root=leaf))
+
+    def check_node(self, *path, **kwargs):
+        """Expands the passed path and checks a checkbox that is located at the node."""
+        return self.check_uncheck_node(True, *path, **kwargs)
+
+    def uncheck_node(self, *path, **kwargs):
+        """Expands the passed path and unchecks a checkbox that is located at the node."""
+        return self.check_uncheck_node(False, *path, **kwargs)
+
+    def node_checked(self, *path, **kwargs):
+        """Check if a checkbox is checked on the node in that path."""
+        leaf = self.expand_path(*path, **kwargs)
+        if not self.is_checkable(leaf):
+            raise TypeError('Item with path {} in {} is not checkable'.format(
+                castmap(str, path), self.tree_id))
+        return self.is_checked(leaf)
 
 
 class Tree(Pretty):
