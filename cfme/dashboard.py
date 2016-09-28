@@ -82,10 +82,7 @@ class Widget(Pretty):
         "5.6": "//div[@id='{}']//div[contains(@class, 'card-pf-footer')]"
     })
     _zoom = "//div[@id='{}']//a[@title='Zoom in on this chart']"
-    _zoomed_name = deferred_verpick({
-        version.LOWEST: "//div[@id='lightbox_div']//span[contains(@class, 'modtitle_text')]",
-        "5.5": "//div[@id='lightbox_div']//h3"
-    })
+    _zoomed_name = "//div[@id='lightbox_div']//h2[contains(@class, 'card-pf-title')]"
     _zoomed_close = deferred_verpick({
         version.LOWEST: "//div[@id='lightbox_div']//a[@title='Close']",
         "5.5": "//div[@id='lightbox_div']//a[@title='Close']/i"
@@ -308,10 +305,8 @@ class BaseWidgetContent(Pretty):
     pretty_attrs = ['widget_box_id']
 
     def __init__(self, widget_box_id):
-        self.root = lambda: sel.element(version.pick({
-            version.LOWEST: "//div[@id='{}']//div[contains(@class, 'modbox')]",
-            '5.5': "//div[@id='{}']//div[contains(@class, 'panel-body')]"
-        }).format(widget_box_id))
+        self.root = lambda: sel.element(
+            "//div[@id='{}']//div[contains(@class, 'card-pf-body')]".format(widget_box_id))
 
     @property
     def data(self):
