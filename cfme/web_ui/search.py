@@ -7,8 +7,8 @@ from cfme.fixtures import pytest_selenium as sel
 from cfme.web_ui import expression_editor as exp_ed
 from cfme.web_ui import Input, Region, Select, fill
 from cfme.web_ui.form_buttons import FormButton
-from utils.version import current_version
 from utils.wait import wait_for
+from utils.log import logger
 
 
 search_box = Region(
@@ -48,9 +48,12 @@ search_box = Region(
 
 
         # Buttons on main view
+        # https://bugzilla.redhat.com/show_bug.cgi?id=1380430
+        # TODO: update dimmed/disabled alt-text as 1380430 is fixed
         apply_filter_button=FormButton("Apply the current filter"),
         load_filter_button=FormButton(alt="Load a filter",
-            dimmed_alt="No saved filters or report filters are available to load"),
+                                      dimmed_alt="No saved filters or report filters are "
+                                                 "available to load"),
         delete_filter_button=FormButton("Delete the filter named", partial_alt=True),
         save_filter_button=FormButton("Save the current filter"),
         reset_filter_button=FormButton("Reset the filter"),
@@ -127,13 +130,22 @@ def is_advanced_filter_applied():
     return len(filter(sel.is_displayed, sel.elements(search_box.clear_advanced_search))) > 0
 
 
-def ensure_no_filter_applied():
+def ensure_no_filter_applied(clear_expression=False):
     """If any filter is applied in the quadicon view, it will be disabled."""
     # The expression filter
     if is_advanced_filter_applied():
+        logger.debug('search.ensure_no_filter_applied: advanced filter applied, removing')
+        # Clear filter using breadcrumb link
+        ensure_advanced_search_closed()
         sel.click(search_box.clear_advanced_search)
+
+        if clear_expression:
+            logger.debug('search.ensure_no_filter_applied: resetting filter expression')
+            reset_filter()
+
     # The simple filter
     if len(sel.value(search_box.search_field).strip()) > 0:
+        logger.debug('search.ensure_no_filter_applied: simple filter applied, removing')
         sel.set_text(search_box.search_field, "")
         sel.click(search_box.search_icon)
 
@@ -146,9 +158,12 @@ def ensure_advanced_search_open():
     if not is_advanced_search_possible():
         raise Exception("Advanced search is not possible in this location!")
     if not is_advanced_search_opened():
+        logger.debug('search.ensure_advanced_search_open: filter closed, opening')
         sel.click(search_box.toggle_advanced)   # Open
 
-    wait_for(is_advanced_search_opened, fail_condition=False, num_sec=5)
+    wait_for(is_advanced_search_opened, fail_condition=False, num_sec=10,
+             message='Waiting for advanced search to open',
+             fail_function=sel.click(search_box.toggle_advanced))
 
 
 def reset_filter():
@@ -183,10 +198,7 @@ def delete_filter(cancel=False):
 def ensure_advanced_search_closed():
     """Checks if the advanced search box is open and if it does, closes it."""
     if is_advanced_search_opened():
-        if current_version() >= "5.4":
-            sel.click(search_box.close_button)
-        else:
-            sel.click(search_box.toggle_advanced)   # Close
+        sel.click(search_box.close_button)
         wait_for(is_advanced_search_opened, fail_condition=True, num_sec=5)
 
 
