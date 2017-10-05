@@ -309,15 +309,15 @@ class IPAppliance(object):
     def user(self):
         from cfme.configure.access_control import User
         from cfme.base.credential import Credential
-        if self._user is None:
+
             # Admin by default
-            username = conf.credentials['default']['username']
-            password = conf.credentials['default']['password']
-            logger.info(
+        username = 'tuser'
+        password = conf.credentials['default']['password']
+        logger.info(
                 '%r.user was set to None before, therefore generating an admin user: %s/%s',
                 self, username, password)
-            cred = Credential(principal=username, secret=password)
-            self._user = User(credential=cred, appliance=self, name='Administrator')
+        cred = Credential(principal=username, secret=password)
+        self._user = User(credential=cred, appliance=self, name='testuser')
         return self._user
 
     @user.setter

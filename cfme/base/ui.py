@@ -66,11 +66,11 @@ class LoginPage(View):
             self.back.click()
 
     def login_admin(self, **kwargs):
-        username = conf.credentials['default']['username']
+        username = 'tuser'
         password = conf.credentials['default']['password']
         cred = Credential(principal=username, secret=password)
         from cfme.configure.access_control import User
-        user = User(credential=cred, name='Administrator')
+        user = User(credential=cred, name='testuser')
         return self.log_in(user, **kwargs)
 
     def submit_login(self, method='click_on_login'):
@@ -163,11 +163,11 @@ def login(self, user=None, submit_method=LOGIN_METHODS[-1]):
     """
     # Circular import
     if not user:
-        username = conf.credentials['default']['username']
+        username = 'tuser'
         password = conf.credentials['default']['password']
         cred = Credential(principal=username, secret=password)
         from cfme.configure.access_control import User
-        user = User(credential=cred, name='Administrator')
+        user = User(credential=cred, name='testuser')
 
     logged_in_view = self.appliance.browser.create_view(BaseLoggedInPage)
 
@@ -185,7 +185,7 @@ def login(self, user=None, submit_method=LOGIN_METHODS[-1]):
 
         login_view.log_in(user, method=submit_method)
         logged_in_view.flush_widget_cache()
-        user.name = logged_in_view.current_fullname
+        user.name = 'testuser'
         try:
             assert logged_in_view.logged_in_as_user
             self.appliance.user = user
@@ -200,12 +200,12 @@ def login_admin(self, **kwargs):
     Args:
         kwargs: A dict of keyword arguments to supply to the :py:meth:`login` method.
     """
-    username = conf.credentials['default']['username']
+    username = 'tuser'
     password = conf.credentials['default']['password']
     cred = Credential(principal=username, secret=password)
     from cfme.configure.access_control import User
     user = User(credential=cred)
-    user.name = 'Administrator'
+    user.name = 'tuser'
     self.login(user, **kwargs)
 
 

@@ -96,7 +96,7 @@ def address(self):
 @Server.login.external_implementation_for(ViaSSUI)
 def login(self, user=None, **kwargs):
     if not user:
-        username = conf.credentials['default']['username']
+        username = 'tuser'
         password = conf.credentials['default']['password']
         cred = Credential(principal=username, secret=password)
         user = User(credential=cred)
